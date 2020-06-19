@@ -51,3 +51,5 @@ class Distribute_MNIST:
                 last_owner
             )
             self.data_pointer[last_owner.id].append(last_image_ptr)
+
+    return self.data_pointer

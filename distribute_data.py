@@ -3,7 +3,15 @@ class Distribute_MNIST:
   This class distribute each image among different workers
   It returns a dictionary with key as data owner's id and 
   value as pointer to the list of data batches at owner's 
-  location.               
+  location.
+  
+  example:-  
+  >>> from distribute_data import Distribute_MNIST
+  >>> obj = Distribute_MNIST(data-owners= (alice, bob, claire), data_loader= torch.utils.data.DataLoader(trainset)) 
+  >>> obj.data_pointer['alice'][1].shape, obj.data_pointer['bob'][1].shape, obj.data_pointer['claire'][1].shape
+   (torch.Size([64, 1, 9, 9]),
+    torch.Size([64, 1, 9, 9]),
+    torch.Size([64, 1, 10, 10]))
   """
 
     def __init__(self, data_owners, data_loader):

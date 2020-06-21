@@ -8,7 +8,7 @@ class Distribute_MNIST:
   example:-  
   >>> from distribute_data import Distribute_MNIST
   >>> obj = Distribute_MNIST(data-owners= (alice, bob, claire), data_loader= torch.utils.data.DataLoader(trainset)) 
-  >>> obj.data_pointer['alice'][1].shape, obj.data_pointer['bob'][1].shape, obj.data_pointer['claire'][1].shape
+  >>> obj.data_pointer[1]['alice'].shape, obj.data_pointer[1]['bob'].shape, obj.data_pointer[1]['claire'].shape
    (torch.Size([64, 1, 9, 9]),
     torch.Size([64, 1, 9, 9]),
     torch.Size([64, 1, 10, 10]))
@@ -27,20 +27,29 @@ class Distribute_MNIST:
         self.data_loader = data_loader
         self.no_of_owner = len(data_owners)
 
-        self.data_pointer = {}
+        self.data_pointer = []
         """
-        self.data_pointer:  (key, value) = (id of the data holder, a pointer to the list of batches at that data holder).
+        self.data_pointer:  list of dictionaries where 
+        (key, value) = (id of the data holder, a pointer to the list of batches at that data holder).
+        example:
+        self.data_pointer  = [
+                                {"alice": pointer_to_alice_batch1, "bob": pointer_to_bob_batch1},
+                                {"alice": pointer_to_alice_batch2, "bob": pointer_to_bob_batch2},
+                                ...
+                            ]
         """
 
-        # initialize the values of each worker with an empty list
-        for onwer in self.data_owners:
-            self.data_pointer[onwer.id] = []
+        self.labels = []
 
         # iterate over each batch of dataloader for, 1) spliting image 2) sending to VirtualWorker
         for images, labels in self.data_loader:
 
+            curr_data_dict = {}
+
             # calculate width and height according to the no. of workers for UNIFORM distribution
             width, height = [x // (self.no_of_owner) for x in images.shape[2:4]]
+
+            self.labels.append(labels)
 
             # iterate over each worker for distribution of current batch of the self.data_loader
             for i, owner in enumerate(self.data_owners[:-1]):
@@ -50,12 +59,14 @@ class Distribute_MNIST:
                     :, :, width * i : width * (i + 1), height * i : height * (i + 1)
                 ].send(owner)
 
-                # append the pointer to the splitted image into data_pointer specified by owner's id as key
-                self.data_pointer[owner.id].append(image_part_ptr)
+                curr_data_dict[owner.id] = image_part_ptr
 
             # Repeat same for the remaining part of the image
             last_owner = self.data_owners[-1]
-            last_image_ptr = images[:, :, width * (i + 1) :, height * (i + 1) :].send(
+            last_part_ptr = images[:, :, width * (i + 1) :, height * (i + 1) :].send(
                 last_owner
             )
-            self.data_pointer[last_owner.id].append(last_image_ptr)
+
+            curr_data_dict[last_owner.id] = last_part_ptr
+
+            self.data_pointer.append(curr_data_dict)

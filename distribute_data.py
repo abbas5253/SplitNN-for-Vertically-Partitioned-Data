@@ -9,9 +9,9 @@ class Distribute_MNIST:
   >>> from distribute_data import Distribute_MNIST
   >>> obj = Distribute_MNIST(data-owners= (alice, bob, claire), data_loader= torch.utils.data.DataLoader(trainset)) 
   >>> obj.data_pointer[1]['alice'].shape, obj.data_pointer[1]['bob'].shape, obj.data_pointer[1]['claire'].shape
-   (torch.Size([64, 1, 9, 9]),
-    torch.Size([64, 1, 9, 9]),
-    torch.Size([64, 1, 10, 10]))
+   (torch.Size([64, 1, 9, 28]),
+    torch.Size([64, 1, 9, 28]),
+    torch.Size([64, 1, 10, 28]))
   """
 
     def __init__(self, data_owners, data_loader):
@@ -36,7 +36,7 @@ class Distribute_MNIST:
                                 {"alice": pointer_to_alice_batch1, "bob": pointer_to_bob_batch1},
                                 {"alice": pointer_to_alice_batch2, "bob": pointer_to_bob_batch2},
                                 ...
-                            ]
+                             ]
         """
 
         self.labels = []
@@ -47,7 +47,7 @@ class Distribute_MNIST:
             curr_data_dict = {}
 
             # calculate width and height according to the no. of workers for UNIFORM distribution
-            width, height = [x // (self.no_of_owner) for x in images.shape[2:4]]
+            height = images.shape[-1]//self.no_of_owner
 
             self.labels.append(labels)
 
@@ -55,18 +55,26 @@ class Distribute_MNIST:
             for i, owner in enumerate(self.data_owners[:-1]):
 
                 # split the image and send it to VirtualWorker (which is supposed to be a dataowner or client)
-                image_part_ptr = images[
-                    :, :, width * i : width * (i + 1), height * i : height * (i + 1)
-                ].send(owner)
+                image_part_ptr = images[:, :, :, height * i : height * (i + 1)].send(
+                    owner
+                )
 
                 curr_data_dict[owner.id] = image_part_ptr
 
             # Repeat same for the remaining part of the image
             last_owner = self.data_owners[-1]
-            last_part_ptr = images[:, :, width * (i + 1) :, height * (i + 1) :].send(
-                last_owner
-            )
+            last_part_ptr = images[:, :, :, height * (i + 1) :].send(last_owner)
 
             curr_data_dict[last_owner.id] = last_part_ptr
 
             self.data_pointer.append(curr_data_dict)
+            
+    def __iter__(self):
+        
+        for data_ptr, label in zip(self.data_pointer[:-1], self.labels[:-1]):
+            yield (data_ptr, label)
+            
+    def __len__(self):
+        
+        return len(self.data_loader)-1
+            
